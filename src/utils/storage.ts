@@ -25,6 +25,14 @@ export function setChildTasks(childId: string, tasks: unknown) {
   setItem(STORAGE_KEYS.TASKS(childId), tasks);
 }
 
+export function getAutoImportDate(childId: string) {
+  return getItem<string>(STORAGE_KEYS.AUTO_IMPORT_DATE(childId));
+}
+
+export function setAutoImportDate(childId: string, date: string) {
+  setItem(STORAGE_KEYS.AUTO_IMPORT_DATE(childId), date);
+}
+
 export function getStampRecords(childId: string) {
   return getItem(STORAGE_KEYS.STAMP_RECORDS(childId)) || [];
 }
@@ -39,6 +47,14 @@ export function getRedeemRecords(childId: string) {
 
 export function setRedeemRecords(childId: string, records: unknown) {
   setItem(STORAGE_KEYS.REDEEM_RECORDS(childId), records);
+}
+
+export function getDailyTaskRecords(childId: string) {
+  return getItem(STORAGE_KEYS.DAILY_TASK_RECORDS(childId)) || [];
+}
+
+export function setDailyTaskRecords(childId: string, records: unknown) {
+  setItem(STORAGE_KEYS.DAILY_TASK_RECORDS(childId), records);
 }
 
 export function getChildList() {

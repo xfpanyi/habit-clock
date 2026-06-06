@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import type { Task, TaskTemplate, TaskTemplateItem, TimeSlot } from '@/types';
-import { getChildTasks, setChildTasks, getTaskTemplates, setTaskTemplates } from '@/utils/storage';
+import { getChildTasks, setChildTasks, getTaskTemplates, setTaskTemplates, getAutoImportDate, setAutoImportDate } from '@/utils/storage';
+import { getToday } from '@/utils/date';
 import { DEFAULT_TASKS } from '@/utils/constants';
 import { useAppStore } from './appStore';
 
 interface TaskState {
   tasks: Task[];
+  templates: TaskTemplate[];
 
   loadTasks: (childId: string) => void;
   addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
@@ -14,6 +16,8 @@ interface TaskState {
   toggleTask: (id: string) => void;
   importTemplateTasks: (childId: string, templateId: string) => void;
   importDefaultTasks: (childId: string) => void;
+  autoImportDailyTasks: (childId: string) => void;
+  loadTemplates: () => void;
   getTemplates: () => TaskTemplate[];
   addTemplate: (template: Omit<TaskTemplate, 'id' | 'createdAt'>) => void;
   updateTemplate: (id: string, data: Partial<TaskTemplate>) => void;
@@ -21,6 +25,7 @@ interface TaskState {
   addTemplateTask: (templateId: string, task: TaskTemplateItem) => void;
   updateTemplateTask: (templateId: string, taskIndex: number, data: Partial<TaskTemplateItem>) => void;
   deleteTemplateTask: (templateId: string, taskIndex: number) => void;
+  reorderTemplates: (dragIndex: number, dropIndex: number) => void;
   getTodayTemplate: () => TaskTemplate | null;
 }
 
@@ -56,10 +61,22 @@ function getDefaultTemplates(): TaskTemplate[] {
 
 export const useTaskStore = create<TaskState>((set, get) => ({
   tasks: [],
+  templates: [],
 
   loadTasks: (childId) => {
     const list = getChildTasks(childId) as Task[];
     set({ tasks: list });
+  },
+
+  loadTemplates: () => {
+    const templates = getTaskTemplates() as TaskTemplate[];
+    if (templates.length > 0) {
+      set({ templates });
+    } else {
+      const defaultTemplates = getDefaultTemplates();
+      setTaskTemplates(defaultTemplates);
+      set({ templates: defaultTemplates });
+    }
   },
 
   addTask: (task) => {
@@ -102,10 +119,6 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
   importTemplateTasks: (childId, templateId) => {
     const existing = getChildTasks(childId) as Task[];
-    if (existing.length > 0) {
-      useAppStore.getState().showToast('该孩子已有任务', 'info');
-      return;
-    }
     const templates = getTaskTemplates() as TaskTemplate[];
     const template = templates.find((t) => t.id === templateId);
     if (!template) {
@@ -119,17 +132,14 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       enabled: true,
       createdAt: new Date().toISOString(),
     }));
-    setChildTasks(childId, newTasks);
-    set({ tasks: newTasks });
+    const combined = [...existing, ...newTasks];
+    setChildTasks(childId, combined);
+    set({ tasks: combined });
     useAppStore.getState().showToast('导入模板任务成功', 'success');
   },
 
   importDefaultTasks: (childId) => {
     const existing = getChildTasks(childId) as Task[];
-    if (existing.length > 0) {
-      useAppStore.getState().showToast('该孩子已有任务', 'info');
-      return;
-    }
     const todayTemplate = get().getTodayTemplate();
     const sourceTasks = todayTemplate ? todayTemplate.tasks : DEFAULT_TASKS;
     const newTasks: Task[] = sourceTasks.map((t) => ({
@@ -139,9 +149,44 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       enabled: true,
       createdAt: new Date().toISOString(),
     }));
-    setChildTasks(childId, newTasks);
-    set({ tasks: newTasks });
+    const combined = [...existing, ...newTasks];
+    setChildTasks(childId, combined);
+    set({ tasks: combined });
     useAppStore.getState().showToast('导入默认任务成功', 'success');
+  },
+
+  autoImportDailyTasks: (childId) => {
+    const today = getToday();
+    const lastImportDate = getAutoImportDate(childId);
+    
+    // 如果今天已经导入过，不再重复导入
+    if (lastImportDate === today) {
+      return;
+    }
+    
+    const existing = getChildTasks(childId) as Task[];
+    const todayTemplate = get().getTodayTemplate();
+    
+    // 如果没有匹配的模板，不自动导入
+    if (!todayTemplate) {
+      return;
+    }
+    
+    // 清除之前的任务（可选，根据需求决定是否保留历史任务）
+    // 这里选择保留历史任务，只添加新任务
+    const newTasks: Task[] = todayTemplate.tasks.map((t) => ({
+      ...t,
+      id: generateId(),
+      childId,
+      enabled: true,
+      createdAt: new Date().toISOString(),
+    }));
+
+    // 每天自动导入时替换旧任务，只保留当天模板的任务
+    setChildTasks(childId, newTasks);
+    setAutoImportDate(childId, today);
+    set({ tasks: newTasks });
+    useAppStore.getState().showToast(`已自动导入${todayTemplate.name}任务`, 'success');
   },
 
   getTemplates: () => {
@@ -158,6 +203,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     const templates = getTaskTemplates() as TaskTemplate[];
     const updated = [...templates, newTemplate];
     setTaskTemplates(updated);
+    set({ templates: updated });
     useAppStore.getState().showToast('添加模板成功', 'success');
   },
 
@@ -165,6 +211,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     const templates = getTaskTemplates() as TaskTemplate[];
     const updated = templates.map((t) => (t.id === id ? { ...t, ...data } : t));
     setTaskTemplates(updated);
+    set({ templates: updated });
     useAppStore.getState().showToast('模板更新成功', 'success');
   },
 
@@ -172,6 +219,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     const templates = getTaskTemplates() as TaskTemplate[];
     const updated = templates.filter((t) => t.id !== id);
     setTaskTemplates(updated);
+    set({ templates: updated });
     useAppStore.getState().showToast('删除模板成功', 'success');
   },
 
@@ -181,6 +229,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       t.id === templateId ? { ...t, tasks: [...t.tasks, task] } : t
     );
     setTaskTemplates(updated);
+    set({ templates: updated });
     useAppStore.getState().showToast('添加任务成功', 'success');
   },
 
@@ -195,6 +244,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       return { ...t, tasks: newTasks };
     });
     setTaskTemplates(updated);
+    set({ templates: updated });
     useAppStore.getState().showToast('任务更新成功', 'success');
   },
 
@@ -209,12 +259,26 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       return { ...t, tasks: newTasks };
     });
     setTaskTemplates(updated);
+    set({ templates: updated });
     useAppStore.getState().showToast('删除任务成功', 'success');
+  },
+
+  reorderTemplates: (dragIndex, dropIndex) => {
+    const templates = getTaskTemplates() as TaskTemplate[];
+    if (dragIndex < 0 || dragIndex >= templates.length || dropIndex < 0 || dropIndex >= templates.length) {
+      return;
+    }
+    const newTemplates = [...templates];
+    const [draggedTemplate] = newTemplates.splice(dragIndex, 1);
+    newTemplates.splice(dropIndex, 0, draggedTemplate);
+    setTaskTemplates(newTemplates);
+    set({ templates: newTemplates });
   },
 
   getTodayTemplate: () => {
     const templates = getTaskTemplates() as TaskTemplate[];
     const today = new Date().getDay();
+    // 按模板顺序（索引）返回第一个匹配的模板
     return templates.find((t) => t.applyDays.includes(today)) || null;
   },
 }));

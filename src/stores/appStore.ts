@@ -24,7 +24,7 @@ interface AppState {
 export const useAppStore = create<AppState>((set, get) => ({
   userRole: null,
   selectedChildId: null,
-  theme: 'girl',
+  theme: 'boy',
   isAuthenticated: false,
   toast: null,
 
@@ -41,13 +41,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (savedTheme) {
       document.documentElement.setAttribute('data-theme', savedTheme);
     } else {
-      document.documentElement.setAttribute('data-theme', 'girl');
+      document.documentElement.setAttribute('data-theme', 'boy');
     }
 
     set({
       userRole: savedRole,
       selectedChildId: savedChildId,
-      theme: savedTheme || 'girl',
+      theme: savedTheme || 'boy',
       isAuthenticated: false,
     });
   },
@@ -84,7 +84,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   logout: () => {
-    set({ userRole: null, selectedChildId: null, isAuthenticated: false });
+    set({ userRole: null, isAuthenticated: false, selectedChildId: null });
     localStorage.removeItem('userRole');
     localStorage.removeItem('selectedChildId');
   },

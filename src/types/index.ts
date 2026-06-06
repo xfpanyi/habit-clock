@@ -53,6 +53,17 @@ export interface StampRecord {
   createdAt: string;
 }
 
+export interface DailyTaskRecord {
+  id: string;
+  childId: string;
+  date: string;
+  taskId: string;
+  taskName: string;
+  completed: boolean;
+  stampReward: number;
+  createdAt: string;
+}
+
 export interface RedeemRecord {
   id: string;
   childId: string;

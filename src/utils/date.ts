@@ -36,7 +36,6 @@ export function isToday(dateStr: string): boolean {
   return isSameDay(parseISO(dateStr), new Date());
 }
 
-const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const WEEK_DAYS_CN = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
 export function getWeekDayLabel(dateStr: string): string {

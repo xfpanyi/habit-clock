@@ -34,6 +34,7 @@ function Layout() {
 
   const showTabBar = ['/home', '/stamps', '/redeem', '/profile'].includes(location.pathname);
   const isPublicPage = ['/', '/parent-login'].includes(location.pathname);
+  const isParentPage = ['/task-manage', '/product-manage', '/child-manage', '/confirm-redeem', '/redeem-records'].includes(location.pathname);
 
   if (isPublicPage) {
     return (
@@ -59,7 +60,7 @@ function Layout() {
         <Route path="/redeem-records" element={userRole === 'parent' ? <RedeemRecords /> : <Navigate to="/home" replace />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>
-      {showTabBar && <TabBar />}
+      {showTabBar && !isParentPage && <TabBar />}
       <Toast />
     </div>
   );

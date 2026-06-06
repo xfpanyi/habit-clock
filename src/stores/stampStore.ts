@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import type { StampRecord, RedeemRecord, Product } from '@/types';
-import { getStampRecords, setStampRecords, getRedeemRecords, setRedeemRecords } from '@/utils/storage';
+import type { StampRecord, RedeemRecord, Product, DailyTaskRecord, Task } from '@/types';
+import { getStampRecords, setStampRecords, getRedeemRecords, setRedeemRecords, getDailyTaskRecords, setDailyTaskRecords } from '@/utils/storage';
 import { getToday, getWeekDates } from '@/utils/date';
 import { useAppStore } from './appStore';
 import { useChildStore } from './childStore';
@@ -8,11 +8,14 @@ import { useChildStore } from './childStore';
 interface StampState {
   stampRecords: StampRecord[];
   redeemRecords: RedeemRecord[];
+  dailyTaskRecords: DailyTaskRecord[];
 
   loadRecords: (childId: string) => void;
   addStamp: (childId: string, taskId: string, taskName: string, count: number) => void;
   applyRedeem: (childId: string, product: Product) => void;
   confirmRedeem: (recordId: string, approved: boolean) => void;
+  recordDailyTasks: (childId: string, tasks: Task[]) => void;
+  getDailyTaskHistory: (childId: string, date: string) => { completed: DailyTaskRecord[]; incomplete: DailyTaskRecord[] };
   getWeeklyStats: (childId: string) => { date: string; day: string; count: number }[];
   getTodayEarned: (childId: string) => number;
   getPendingRedeems: () => RedeemRecord[];
@@ -26,11 +29,17 @@ function generateId(): string {
 export const useStampStore = create<StampState>((set, get) => ({
   stampRecords: [],
   redeemRecords: [],
+  dailyTaskRecords: [],
 
   loadRecords: (childId) => {
     const stamps = getStampRecords(childId) as StampRecord[];
     const redeems = getRedeemRecords(childId) as RedeemRecord[];
-    set({ stampRecords: stamps, redeemRecords: redeems });
+    const dailyTasks = getDailyTaskRecords(childId) as DailyTaskRecord[];
+    set((state) => ({
+      stampRecords: [...state.stampRecords.filter((r) => r.childId !== childId), ...stamps],
+      redeemRecords: [...state.redeemRecords.filter((r) => r.childId !== childId), ...redeems],
+      dailyTaskRecords: [...state.dailyTaskRecords.filter((r) => r.childId !== childId), ...dailyTasks],
+    }));
   },
 
   addStamp: (childId, taskId, taskName, count) => {
@@ -116,14 +125,12 @@ export const useStampStore = create<StampState>((set, get) => ({
     const records = get().stampRecords.filter(
       (r) => r.childId === childId && r.type === 'earn'
     );
-    return weekDates.map((date) => {
-      const dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-      const dayIndex = new Date(date).getDay();
-      const dayLabel = dayNames[dayIndex === 0 ? 6 : dayIndex - 1];
+    const dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    return weekDates.map((date, index) => {
       const count = records
         .filter((r) => r.date === date)
         .reduce((sum, r) => sum + r.count, 0);
-      return { date, day: dayLabel, count };
+      return { date, day: dayNames[index], count };
     });
   },
 
@@ -141,5 +148,43 @@ export const useStampStore = create<StampState>((set, get) => ({
     return get().redeemRecords
       .filter((r) => r.childId === childId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  },
+
+  recordDailyTasks: (childId, tasks) => {
+    const today = getToday();
+    const existingRecords = getDailyTaskRecords(childId) as DailyTaskRecord[];
+    const alreadyRecorded = existingRecords.some((r) => r.date === today);
+    if (alreadyRecorded) return;
+
+    const completedTaskIds = new Set(
+      get().stampRecords
+        .filter((r) => r.childId === childId && r.date === today && r.type === 'earn')
+        .map((r) => r.taskId)
+    );
+
+    const records: DailyTaskRecord[] = tasks.map((task) => ({
+      id: generateId(),
+      childId,
+      date: today,
+      taskId: task.id,
+      taskName: task.name,
+      completed: completedTaskIds.has(task.id),
+      stampReward: task.stampReward,
+      createdAt: new Date().toISOString(),
+    }));
+
+    const updated = [...existingRecords, ...records];
+    setDailyTaskRecords(childId, updated);
+    set((state) => ({
+      dailyTaskRecords: [...state.dailyTaskRecords.filter((r) => r.childId !== childId), ...updated],
+    }));
+  },
+
+  getDailyTaskHistory: (childId, date) => {
+    const records = get().dailyTaskRecords.filter((r) => r.childId === childId && r.date === date);
+    return {
+      completed: records.filter((r) => r.completed),
+      incomplete: records.filter((r) => !r.completed),
+    };
   },
 }));

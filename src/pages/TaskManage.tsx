@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAppStore } from '@/stores/appStore';
 import { useTaskStore } from '@/stores/taskStore';
 import { useChildStore } from '@/stores/childStore';
-import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Sparkles, ChevronDown, ChevronUp, CalendarDays } from 'lucide-react';
+import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Sparkles, ChevronDown, ChevronUp, CalendarDays, GripVertical } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Modal from '@/components/Modal';
 import EmptyState from '@/components/EmptyState';
@@ -15,13 +15,14 @@ export default function TaskManage() {
   const { selectedChildId } = useAppStore();
   const { children } = useChildStore();
   const {
-    tasks, loadTasks, addTask, updateTask, deleteTask, toggleTask, importTemplateTasks, importDefaultTasks,
-    getTemplates, addTemplate, updateTemplate, deleteTemplate, addTemplateTask, updateTemplateTask, deleteTemplateTask,
+    tasks, loadTasks, addTask, updateTask, deleteTask, toggleTask, importTemplateTasks,
+    templates, loadTemplates, addTemplate, updateTemplate, deleteTemplate, addTemplateTask, updateTemplateTask, deleteTemplateTask, reorderTemplates,
   } = useTaskStore();
 
   const [activeTab, setActiveTab] = useState<TabType>('child');
   const [selectedChild, setSelectedChild] = useState(selectedChildId || '');
   const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null);
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
 
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState<string | null>(null);
@@ -48,7 +49,35 @@ export default function TaskManage() {
   const [ttCategory, setTtCategory] = useState('学习');
   const [ttTimeSlot, setTtTimeSlot] = useState<TimeSlot>('morning');
 
-  const templates = getTemplates();
+  const [showImportTemplateModal, setShowImportTemplateModal] = useState(false);
+  const [importTemplateId, setImportTemplateId] = useState<string>('');
+
+  // 同步 selectedChildId 变化
+  useEffect(() => {
+    if (selectedChildId) {
+      setSelectedChild(selectedChildId);
+    }
+  }, [selectedChildId]);
+
+  // 加载模板
+  useEffect(() => {
+    loadTemplates();
+  }, []);
+
+  const handleDragStart = (index: number) => {
+    setDraggingIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggingIndex === null || draggingIndex === index) return;
+    reorderTemplates(draggingIndex, index);
+    setDraggingIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingIndex(null);
+  };
 
   useEffect(() => {
     if (selectedChild && activeTab === 'child') {
@@ -197,10 +226,10 @@ export default function TaskManage() {
                 ))}
               </select>
               <button
-                onClick={() => selectedChild && importDefaultTasks(selectedChild)}
+                onClick={() => selectedChild && setShowImportTemplateModal(true)}
                 className="px-4 py-3 rounded-xl bg-amber-50 text-amber-600 hover:bg-amber-100 transition-colors"
                 disabled={!selectedChild}
-                title="导入今日模板"
+                title="导入任务模板"
               >
                 <Sparkles className="w-5 h-5" />
               </button>
@@ -280,12 +309,26 @@ export default function TaskManage() {
             </button>
 
             <div className="space-y-3">
-              {templates.map((template) => (
-                <div key={template.id} className="bg-white rounded-2xl shadow-card overflow-hidden">
+              {templates.map((template, index) => (
+                <div
+                  key={template.id}
+                  className={`bg-white rounded-2xl shadow-card overflow-hidden transition-all ${draggingIndex === index ? 'opacity-60 ring-2 ring-primary' : ''}`}
+                  draggable
+                  onDragStart={() => handleDragStart(index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragEnd={handleDragEnd}
+                >
                   <div
                     className="flex items-center gap-3 p-4 cursor-pointer"
                     onClick={() => setExpandedTemplate(expandedTemplate === template.id ? null : template.id)}
                   >
+                    <div
+                      className="p-1 rounded-lg hover:bg-gray-100 cursor-grab active:cursor-grabbing"
+                      onClick={(e) => e.stopPropagation()}
+                      title="拖动排序"
+                    >
+                      <GripVertical className="w-4 h-4 text-gray-400" />
+                    </div>
                     <CalendarDays className="w-5 h-5" style={{ color: 'var(--color-primary)' }} />
                     <div className="flex-1 min-w-0">
                       <h3 className="text-sm font-bold text-gray-800">{template.name}</h3>
@@ -543,6 +586,60 @@ export default function TaskManage() {
             <label className="text-sm font-medium text-gray-600 mb-1.5 block">描述</label>
             <input type="text" value={ttDesc} onChange={(e) => setTtDesc(e.target.value)} placeholder="任务描述" className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary" />
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showImportTemplateModal}
+        onClose={() => { setShowImportTemplateModal(false); setImportTemplateId(''); }}
+        title="选择要导入的模板"
+        footer={
+          <div className="flex gap-3">
+            <button onClick={() => { setShowImportTemplateModal(false); setImportTemplateId(''); }} className="flex-1 py-3 rounded-xl text-sm font-medium text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors">取消</button>
+            <button
+              onClick={() => {
+                if (importTemplateId && selectedChild) {
+                  importTemplateTasks(selectedChild, importTemplateId);
+                  setShowImportTemplateModal(false);
+                  setImportTemplateId('');
+                }
+              }}
+              className="flex-1 py-3 rounded-xl text-sm font-bold text-white transition-colors"
+              style={{ backgroundColor: 'var(--color-primary)' }}
+              disabled={!importTemplateId}
+            >
+              导入
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-2">
+          {templates.map((template) => (
+            <button
+              key={template.id}
+              onClick={() => setImportTemplateId(template.id)}
+              className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all ${
+                importTemplateId === template.id ? 'border-primary bg-primary/5' : 'border-gray-200 bg-white'
+              }`}
+              style={importTemplateId === template.id ? { borderColor: 'var(--color-primary)' } : {}}
+            >
+              <CalendarDays className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--color-primary)' }} />
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-bold text-gray-800">{template.name}</h4>
+                <p className="text-xs text-gray-400">{template.description}</p>
+              </div>
+              <div className="flex items-center gap-1">
+                {template.applyDays.map((d) => (
+                  <span key={d} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                    {WEEK_DAYS.find((wd) => wd.value === d)?.label}
+                  </span>
+                ))}
+              </div>
+            </button>
+          ))}
+          {templates.length === 0 && (
+            <p className="text-sm text-gray-400 text-center py-4">暂无任务模板</p>
+          )}
         </div>
       </Modal>
     </div>

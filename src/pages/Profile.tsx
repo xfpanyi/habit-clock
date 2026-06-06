@@ -4,13 +4,13 @@ import { useChildStore } from '@/stores/childStore';
 import { LogOut, Palette, UsersRound, Lock, ChevronRight, Baby } from 'lucide-react';
 import Modal from '@/components/Modal';
 import { useState } from 'react';
-import { hashPassword } from '@/utils/crypto';
-import { setParentPassword } from '@/utils/storage';
+import { hashPassword, verifyPassword } from '@/utils/crypto';
+import { setParentPassword, getParentPassword } from '@/utils/storage';
 
 export default function Profile() {
   const navigate = useNavigate();
   const { userRole, theme, setTheme, logout } = useAppStore();
-  const { currentChild, children } = useChildStore();
+  const { currentChild } = useChildStore();
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -20,10 +20,7 @@ export default function Profile() {
   const handleThemeChange = (newTheme: 'boy' | 'girl') => {
     setTheme(newTheme);
     if (currentChild) {
-      const updatedChildren = children.map((c) =>
-        c.id === currentChild.id ? { ...c, theme: newTheme } : c
-      );
-      localStorage.setItem('childList', JSON.stringify(updatedChildren));
+      useChildStore.getState().updateChild(currentChild.id, { theme: newTheme, avatar: newTheme === 'boy' ? '👦' : '👧' });
     }
   };
 
@@ -37,9 +34,9 @@ export default function Profile() {
       setPasswordError('两次输入的密码不一致');
       return;
     }
-    const savedPassword = localStorage.getItem('parentPassword');
+    const savedPassword = getParentPassword();
     const targetHash = savedPassword || hashPassword('123456');
-    if (hashPassword(oldPassword) !== targetHash) {
+    if (!verifyPassword(oldPassword, targetHash)) {
       setPasswordError('原密码错误');
       return;
     }

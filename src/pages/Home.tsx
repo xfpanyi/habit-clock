@@ -4,27 +4,52 @@ import { useAppStore } from '@/stores/appStore';
 import { useChildStore } from '@/stores/childStore';
 import { useTaskStore } from '@/stores/taskStore';
 import { useStampStore } from '@/stores/stampStore';
-import { Award, Settings, Sparkles, ClipboardList, Package, Users, CheckCircle, Sun, Sunrise, Moon } from 'lucide-react';
+import { Award, Settings, Sparkles, ClipboardList, Package, Users, CheckCircle, Sun, Sunrise, Moon, CalendarDays } from 'lucide-react';
 import TaskCard from '@/components/TaskCard';
 import EmptyState from '@/components/EmptyState';
+import Modal from '@/components/Modal';
 import { getToday } from '@/utils/date';
 import type { TimeSlot } from '@/types';
-import { TIME_SLOT_OPTIONS } from '@/utils/constants';
+import { TIME_SLOT_OPTIONS, WEEK_DAYS } from '@/utils/constants';
 
 export default function Home() {
   const navigate = useNavigate();
   const { userRole, selectedChildId } = useAppStore();
   const { currentChild, children } = useChildStore();
-  const { tasks, loadTasks, importDefaultTasks } = useTaskStore();
+  const { tasks, loadTasks, importTemplateTasks, templates, loadTemplates, autoImportDailyTasks } = useTaskStore();
   const { stampRecords, loadRecords, addStamp } = useStampStore();
   const [completedTaskIds, setCompletedTaskIds] = useState<Set<string>>(new Set());
+  const [showImportTemplateModal, setShowImportTemplateModal] = useState(false);
+  const [importTemplateId, setImportTemplateId] = useState<string>('');
 
   useEffect(() => {
     if (selectedChildId) {
       loadTasks(selectedChildId);
       loadRecords(selectedChildId);
+      // 自动导入当天任务模板
+      autoImportDailyTasks(selectedChildId);
     }
   }, [selectedChildId]);
+
+  // 当 currentChild 变化时也加载任务
+  useEffect(() => {
+    if (currentChild?.id) {
+      loadTasks(currentChild.id);
+      loadRecords(currentChild.id);
+    }
+  }, [currentChild?.id]);
+
+  // 加载模板
+  useEffect(() => {
+    loadTemplates();
+  }, []);
+
+  useEffect(() => {
+    if (selectedChildId && tasks.length > 0) {
+      const { recordDailyTasks } = useStampStore.getState();
+      recordDailyTasks(selectedChildId, tasks);
+    }
+  }, [selectedChildId, tasks]);
 
   useEffect(() => {
     if (selectedChildId) {
@@ -39,9 +64,13 @@ export default function Home() {
   }, [stampRecords, selectedChildId]);
 
   const handleCompleteTask = (taskId: string, taskName: string, stampReward: number) => {
-    if (!selectedChildId || completedTaskIds.has(taskId)) return;
+    if (!selectedChildId) return;
+    const today = getToday();
+    const alreadyCompleted = stampRecords.some(
+      (r) => r.childId === selectedChildId && r.taskId === taskId && r.date === today && r.type === 'earn'
+    );
+    if (alreadyCompleted) return;
     addStamp(selectedChildId, taskId, taskName, stampReward);
-    setCompletedTaskIds((prev) => new Set(prev).add(taskId));
   };
 
   const progress = tasks.length > 0 ? Math.round((completedTaskIds.size / tasks.filter(t => t.enabled).length) * 100) : 0;
@@ -151,13 +180,18 @@ export default function Home() {
         )}
 
         {tasks.length === 0 && (
-          <div className="mb-4">
+          <div className="mb-4 space-y-3">
+            <div className="text-center py-8">
+              <div className="text-4xl mb-3">📝</div>
+              <h3 className="text-sm font-medium text-gray-500 mb-1">还没有任务哦</h3>
+              <p className="text-xs text-gray-400">导入任务模板开始打卡吧</p>
+            </div>
             <button
-              onClick={() => selectedChildId && importDefaultTasks(selectedChildId)}
+              onClick={() => selectedChildId && setShowImportTemplateModal(true)}
               className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-primary hover:text-primary transition-all"
             >
               <Sparkles className="w-4 h-4" />
-              导入今日模板任务
+              导入任务模板
             </button>
           </div>
         )}
@@ -203,6 +237,60 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      <Modal
+        isOpen={showImportTemplateModal}
+        onClose={() => { setShowImportTemplateModal(false); setImportTemplateId(''); }}
+        title="选择要导入的模板"
+        footer={
+          <div className="flex gap-3">
+            <button onClick={() => { setShowImportTemplateModal(false); setImportTemplateId(''); }} className="flex-1 py-3 rounded-xl text-sm font-medium text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors">取消</button>
+            <button
+              onClick={() => {
+                if (importTemplateId && selectedChildId) {
+                  importTemplateTasks(selectedChildId, importTemplateId);
+                  setShowImportTemplateModal(false);
+                  setImportTemplateId('');
+                }
+              }}
+              className="flex-1 py-3 rounded-xl text-sm font-bold text-white transition-colors"
+              style={{ backgroundColor: 'var(--color-primary)' }}
+              disabled={!importTemplateId}
+            >
+              导入
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-2">
+          {templates.map((template) => (
+            <button
+              key={template.id}
+              onClick={() => setImportTemplateId(template.id)}
+              className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all ${
+                importTemplateId === template.id ? 'border-primary bg-primary/5' : 'border-gray-200 bg-white'
+              }`}
+              style={importTemplateId === template.id ? { borderColor: 'var(--color-primary)' } : {}}
+            >
+              <CalendarDays className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--color-primary)' }} />
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-bold text-gray-800">{template.name}</h4>
+                <p className="text-xs text-gray-400">{template.description}</p>
+              </div>
+              <div className="flex items-center gap-1">
+                {template.applyDays.map((d) => (
+                  <span key={d} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                    {WEEK_DAYS.find((wd) => wd.value === d)?.label}
+                  </span>
+                ))}
+              </div>
+            </button>
+          ))}
+          {templates.length === 0 && (
+            <p className="text-sm text-gray-400 text-center py-4">暂无任务模板</p>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -8,11 +8,13 @@ export const STORAGE_KEYS = {
   TASKS: (childId: string) => `demo_tasks_${childId}`,
   STAMP_RECORDS: (childId: string) => `demo_stamp_records_${childId}`,
   REDEEM_RECORDS: (childId: string) => `demo_redeem_${childId}`,
+  DAILY_TASK_RECORDS: (childId: string) => `demo_daily_tasks_${childId}`,
   PRODUCTS: 'managed_products',
   USER_ROLE: 'userRole',
   THEME: 'theme',
   PARENT_PASSWORD: 'parentPassword',
   TASK_TEMPLATES: 'task_templates',
+  AUTO_IMPORT_DATE: (childId: string) => `auto_import_date_${childId}`,
 } as const;
 
 export const DEFAULT_TASKS = [

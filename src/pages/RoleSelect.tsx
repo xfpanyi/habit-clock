@@ -2,14 +2,14 @@ import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/stores/appStore';
 import { useChildStore } from '@/stores/childStore';
 import { useEffect, useState } from 'react';
-import { Baby, Shield, Plus, ChevronRight } from 'lucide-react';
+import { Shield, Plus, ChevronRight } from 'lucide-react';
 import type { Child } from '@/types';
 import Modal from '@/components/Modal';
 
 export default function RoleSelect() {
   const navigate = useNavigate();
   const { setUserRole, setSelectedChild, setTheme } = useAppStore();
-  const { children, loadChildren, addChild } = useChildStore();
+  const { children, loadChildren, addChild, selectChild } = useChildStore();
   const [showAddChild, setShowAddChild] = useState(false);
   const [newChildName, setNewChildName] = useState('');
   const [newChildGender, setNewChildGender] = useState<'boy' | 'girl'>('girl');
@@ -22,6 +22,7 @@ export default function RoleSelect() {
   const handleSelectChild = (child: Child) => {
     setUserRole('child');
     setSelectedChild(child.id);
+    selectChild(child.id); // 同时更新 currentChild
     setTheme(child.theme);
     navigate('/home');
   };

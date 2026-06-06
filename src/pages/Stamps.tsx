@@ -1,15 +1,23 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '@/stores/appStore';
 import { useChildStore } from '@/stores/childStore';
 import { useStampStore } from '@/stores/stampStore';
-import { Award, TrendingUp, ShoppingBag, Calendar } from 'lucide-react';
+import { Award, TrendingUp, ShoppingBag, Calendar, CheckCircle2, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import EmptyState from '@/components/EmptyState';
-import { formatDateTime } from '@/utils/date';
+import { formatDateTime, getToday } from '@/utils/date';
+import type { DailyTaskRecord } from '@/types';
+
+interface DailyTaskGroup {
+  date: string;
+  completed: DailyTaskRecord[];
+  incomplete: DailyTaskRecord[];
+}
 
 export default function Stamps() {
   const { selectedChildId } = useAppStore();
   const { currentChild } = useChildStore();
-  const { stampRecords, loadRecords, getWeeklyStats } = useStampStore();
+  const { stampRecords, loadRecords, getWeeklyStats, dailyTaskRecords } = useStampStore();
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (selectedChildId) {
@@ -24,6 +32,37 @@ export default function Stamps() {
     .filter((r) => r.childId === selectedChildId)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 20);
+
+  const taskHistory: DailyTaskGroup[] = [];
+  if (selectedChildId) {
+    const dateMap = new Map<string, DailyTaskGroup>();
+    dailyTaskRecords
+      .filter((r) => r.childId === selectedChildId)
+      .forEach((record) => {
+        if (!dateMap.has(record.date)) {
+          dateMap.set(record.date, { date: record.date, completed: [], incomplete: [] });
+        }
+        const group = dateMap.get(record.date)!;
+        if (record.completed) {
+          group.completed.push(record);
+        } else {
+          group.incomplete.push(record);
+        }
+      });
+    taskHistory.push(...Array.from(dateMap.values()).sort((a, b) => b.date.localeCompare(a.date)));
+  }
+
+  const toggleDate = (date: string) => {
+    setExpandedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) {
+        next.delete(date);
+      } else {
+        next.add(date);
+      }
+      return next;
+    });
+  };
 
   return (
     <div className="min-h-screen pb-20">
@@ -70,6 +109,89 @@ export default function Stamps() {
                   <span className="text-[10px] text-gray-400">{stat.day}</span>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-card p-5 mb-6">
+          <h2 className="text-base font-bold text-gray-800 mb-4">历史任务完成情况</h2>
+          {taskHistory.length === 0 ? (
+            <EmptyState message="还没有任务完成记录" />
+          ) : (
+            <div className="space-y-3">
+              {taskHistory.map((group) => {
+                const isExpanded = expandedDates.has(group.date);
+                const total = group.completed.length + group.incomplete.length;
+                const isToday = group.date === getToday();
+                return (
+                  <div key={group.date} className="border border-gray-100 rounded-xl overflow-hidden">
+                    <button
+                      onClick={() => toggleDate(group.date)}
+                      className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm font-semibold text-gray-700">
+                          {isToday ? '今天' : group.date}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          ({group.completed.length}/{total} 完成)
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {group.incomplete.length > 0 && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-500">
+                            {group.incomplete.length} 未完成
+                          </span>
+                        )}
+                        {isExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-gray-400" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-gray-400" />
+                        )}
+                      </div>
+                    </button>
+                    {isExpanded && (
+                      <div className="p-3 space-y-2">
+                        {group.completed.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-emerald-600 mb-1.5 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              已完成 ({group.completed.length})
+                            </p>
+                            <div className="space-y-1.5">
+                              {group.completed.map((task) => (
+                                <div key={task.id} className="flex items-center gap-2 text-sm text-gray-600">
+                                  <span className="text-emerald-500">✓</span>
+                                  <span className="flex-1">{task.taskName}</span>
+                                  <span className="text-xs text-emerald-500">+{task.stampReward}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {group.incomplete.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-red-500 mb-1.5 flex items-center gap-1">
+                              <XCircle className="w-3 h-3" />
+                              未完成 ({group.incomplete.length})
+                            </p>
+                            <div className="space-y-1.5">
+                              {group.incomplete.map((task) => (
+                                <div key={task.id} className="flex items-center gap-2 text-sm text-gray-600">
+                                  <span className="text-red-400">✗</span>
+                                  <span className="flex-1">{task.taskName}</span>
+                                  <span className="text-xs text-gray-400">+{task.stampReward}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

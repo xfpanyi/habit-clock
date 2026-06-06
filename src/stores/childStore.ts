@@ -26,12 +26,18 @@ export const useChildStore = create<ChildState>((set, get) => ({
   loadChildren: () => {
     const list = getChildList() as Child[];
     const selectedId = getSelectedChildId();
+    const currentChild = list.find((c: Child) => c.id === selectedId) || list[0] || null;
     set({
       children: list,
-      currentChild: list.find((c: Child) => c.id === selectedId) || list[0] || null,
+      currentChild,
     });
-    if (list.length > 0 && selectedId) {
-      useAppStore.getState().setSelectedChild(selectedId);
+    // 只在有选中孩子且 appStore 已初始化时才同步
+    if (currentChild && selectedId) {
+      try {
+        useAppStore.getState().setSelectedChild(currentChild.id);
+      } catch {
+        // appStore 可能还未初始化，忽略错误
+      }
     }
   },
 
